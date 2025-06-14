@@ -1,0 +1,17 @@
+channels:
+- defaults
+- conda-forge
+dependencies:
+- python=3.12.7
+- pip
+- pip:
+  - mlflow==2.19.0
+  - cffi==1.17.1
+  - cloudpickle==3.1.1
+  - matplotlib==3.10.3
+  - pandas==2.3.0
+  - pyarrow==18.1.0
+  - scikit-learn==1.7.0
+  - joblib
+  - optuna
+name: mlflow-env
