@@ -25,8 +25,8 @@ mlflow.set_experiment("Automated-Hyperparameter-Tuning-CI")
 # --- MEMUAT DATA ---
 # Path disederhanakan untuk mengasumsikan file CSV berada di folder yang sama dengan skrip ini.
 try:
-    train_df = pd.read_csv('lung-cancer-model\lung_cancer_train_preprocessed.csv')
-    test_df = pd.read_csv('lung-cancer-model\lung_cancer_test_preprocessed.csv')
+    train_df = pd.read_csv('MLProject\lung-cancer-model\lung_cancer_train_preprocessed.csv')
+    test_df = pd.read_csv('MLProject\lung-cancer-model\lung_cancer_test_preprocessed.csv')
     print("File CSV berhasil dimuat.")
 except FileNotFoundError:
     print("ERROR: File CSV tidak ditemukan! Pastikan 'lung_cancer_train_preprocessed.csv' dan 'lung_cancer_test_preprocessed.csv' ada di dalam folder MLProject bersama dengan skrip ini.")
