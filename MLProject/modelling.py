@@ -1,4 +1,4 @@
-# modelling.py - Workflow CI Otomatis dengan Tuning & Finalisasi
+# modelling.py - Versi Final untuk Workflow CI Otomatis
 
 import os
 import json
@@ -17,30 +17,32 @@ from sklearn.metrics import (
 )
 
 # --- PENGATURAN MLFLOW UNTUK LOKAL (CI) ---
+# Skrip akan membuat folder 'mlruns' untuk menyimpan semua hasil.
 mlflow.set_tracking_uri("file:./mlruns")
 mlflow.set_experiment("Automated-Hyperparameter-Tuning-CI")
 
+
 # --- MEMUAT DATA ---
+# Path disederhanakan untuk mengasumsikan file CSV berada di folder yang sama dengan skrip ini.
 try:
-    train_df = pd.read_csv('lung-cancer-model\lung_cancer_train_preprocessed.csv')
-    test_df = pd.read_csv('lung-cancer-model\lung_cancer_test_preprocessed.csv')
+    train_df = pd.read_csv('lung_cancer_train_preprocessed.csv')
+    test_df = pd.read_csv('lung_cancer_test_preprocessed.csv')
+    print("File CSV berhasil dimuat.")
 except FileNotFoundError:
-    print("Pastikan file CSV hasil preprocessing ada di folder yang sama.")
-    exit()
-
-X_train = train_df.drop('LUNG_CANCER', axis=1)
-y_train = train_df['LUNG_CANCER']
-X_test = test_df.drop('LUNG_CANCER', axis=1)
-y_test = test_df['LUNG_CANCER']
+    print("ERROR: File CSV tidak ditemukan! Pastikan 'lung_cancer_train_preprocessed.csv' dan 'lung_cancer_test_preprocessed.csv' ada di dalam folder MLProject bersama dengan skrip ini.")
+    # Keluar dengan kode error agar proses CI gagal dan jelas penyebabnya.
+    exit(1)
 
 
-# --- FASE 1: FUNGSI UNTUK TUNING (TETAP MENGGUNAKAN OPTUNA) ---
+# --- FASE 1: FUNGSI UNTUK TUNING (MENGGUNAKAN OPTUNA) ---
 def objective(trial):
     """Fungsi ini akan dijalankan berulang kali oleh Optuna untuk setiap trial."""
     params = {
         "n_neighbors": trial.suggest_int("n_neighbors", 3, 21, step=2),
         "weights": trial.suggest_categorical("weights", ["uniform", "distance"]),
-        "algorithm": trial.suggest_categorical("algorithm", ["ball_tree", "kd_tree", "brute"]),
+        "algorithm": trial.suggest_categorical(
+            "algorithm", ["ball_tree", "kd_tree", "brute"]
+        ),
         "p": trial.suggest_int("p", 1, 2),
     }
 
@@ -56,17 +58,13 @@ def objective(trial):
         
         mlflow.log_metric("accuracy", accuracy)
         
-        # Simpan model dari setiap trial (opsional, tapi bagus untuk traceability)
-        joblib.dump(model, f"model_trial_{trial.number}.pkl")
-        mlflow.log_artifact(f"model_trial_{trial.number}.pkl", artifact_path="trial_model")
-        
     return accuracy
 
 
 # --- MENJALANKAN FASE 1: PROSES TUNING ---
-print("--- Memulai Fase 1: Tuning Hyperparameter ---")
+print("\n--- Memulai Fase 1: Tuning Hyperparameter ---")
 study = optuna.create_study(direction="maximize")
-N_TRIALS = 30  # Jumlah trial yang akan dijalankan oleh CI
+N_TRIALS = 20  # Jumlah trial yang akan dijalankan oleh CI
 study.optimize(objective, n_trials=N_TRIALS)
 print("--- Fase 1 Selesai ---")
 
