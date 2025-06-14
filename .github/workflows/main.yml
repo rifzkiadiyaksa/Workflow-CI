@@ -9,44 +9,45 @@ on:
       - main
 
 jobs:
-  train-model-build-serving-docker:
+  train-and-build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Conda environment
+      # PERBAIKAN #5: Cukup satu langkah untuk setup environment.
+      # Semua dependensi, termasuk mlflow, sudah diurus oleh conda.yaml.
+      - name: Set up Conda environment from file
         uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true
-          python-version: 3.12.7
-          activate-environment: mlflow-env
+          python-version: 3.12.7 # Sesuaikan dengan versi di conda.yaml
           environment-file: MLProject/conda.yaml
+          activate-environment: mlflow-env # Nama environment dari conda.yaml
 
-      - name: Install MLflow and other dependencies
-        shell: bash -l {0}
-        run: |
-          conda activate mlflow-env
-          pip install mlflow
-
-      - name: Run MLflow Project, Log Artifacts, and Capture Serving Model Run ID
+      - name: Run MLflow Project and Capture Serving Model Run ID
         id: run_mlflow_project
         shell: bash -l {0}
         run: |
-          conda activate mlflow-env
+          # Masuk ke direktori MLProject untuk menjalankan
           cd MLProject/
-          mlflow run . -e main
           
-          SERVING_RUN_ID=$(cat serving_run_id.txt) 
+          # Jalankan MLProject. Skrip modelling.py akan membuat serving_run_id.txt
+          mlflow run .
+
+          # Baca Run ID dari file yang dibuat oleh skrip python
+          SERVING_RUN_ID=$(cat serving_run_id.txt)
           
+          # Teruskan Run ID ke langkah selanjutnya
           echo "SERVING_RUN_ID=$SERVING_RUN_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Upload MLflow Artifacts to GitHub
+      # PERBAIKAN #3: Path diubah ke mlruns agar artefak yang benar diunggah.
+      - name: Upload MLflow run artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-run-artifacts
-          path: MLProject/github_artifacts/
+          path: MLProject/mlruns/
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -57,19 +58,26 @@ jobs:
       - name: Build and Push Docker Image for Serving
         shell: bash -l {0}
         run: |
-          conda activate mlflow-env
           cd MLProject/
+          # Mengambil Run ID dari output langkah sebelumnya
           SERVING_RUN_ID="${{ steps.run_mlflow_project.outputs.SERVING_RUN_ID }}"
           
+          # Pemeriksaan untuk memastikan Run ID tidak kosong
           if [ -z "$SERVING_RUN_ID" ]; then
-            echo "Error: SERVING_RUN_ID not found from previous step. Cannot build Docker image for serving."
+            echo "Error: SERVING_RUN_ID not found from previous step. Cannot build Docker image."
             exit 1
           fi
 
+          echo "Building Docker image for Run ID: $SERVING_RUN_ID"
+
+          # Nama image di Docker Hub
           IMAGE_NAME="rifzkiadiyaksa/cancer:latest"
           
+          # URI model yang akan di-build, sudah konsisten dengan nama artefak 'serving_model'
           MLFLOW_MODEL_URI="runs:/$SERVING_RUN_ID/serving_model" 
           
-          mlflow models build-docker -m "$MLFLOW_MODEL_URI" -n "$IMAGE_NAME"
+          mlflow models build-docker -m "$MLFLOW_MODEL_URI" -n "$IMAGE_NAME" --enable-mlserver
           
+          echo "Pushing Docker image to Docker Hub..."
           docker push "$IMAGE_NAME"
+          echo "Docker image pushed successfully."
