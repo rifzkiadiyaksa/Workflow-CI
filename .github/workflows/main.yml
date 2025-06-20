@@ -1,0 +1,75 @@
+name: MLflow CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  train-model-build-serving-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: 3.11.11
+          activate-environment: mlflow-env
+          environment-file: MLProject/conda.yaml
+
+      - name: Install MLflow and other dependencies
+        shell: bash -l {0}
+        run: |
+          conda activate mlflow-env
+          pip install mlflow
+
+      - name: Run MLflow Project, Log Artifacts, and Capture Serving Model Run ID
+        id: run_mlflow_project
+        shell: bash -l {0}
+        run: |
+          conda activate mlflow-env
+          cd MLProject/
+          mlflow run . -e main
+          
+          SERVING_RUN_ID=$(cat serving_run_id.txt) 
+          
+          echo "SERVING_RUN_ID=$SERVING_RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Upload MLflow Artifacts to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-run-artifacts
+          path: MLProject/github_artifacts/
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and Push Docker Image for Serving
+        shell: bash -l {0}
+        run: |
+          conda activate mlflow-env
+          cd MLProject/
+          SERVING_RUN_ID="${{ steps.run_mlflow_project.outputs.SERVING_RUN_ID }}"
+          
+          if [ -z "$SERVING_RUN_ID" ]; then
+            echo "Error: SERVING_RUN_ID not found from previous step. Cannot build Docker image for serving."
+            exit 1
+          fi
+
+          IMAGE_NAME="rifzkiadiyaksa/cars_seles:latest"
+          
+          MLFLOW_MODEL_URI="runs:/$SERVING_RUN_ID/serving_model" 
+          
+          mlflow models build-docker -m "$MLFLOW_MODEL_URI" -n "$IMAGE_NAME"
+          
+          docker push "$IMAGE_NAME"
